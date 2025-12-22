@@ -40,3 +40,8 @@ ENV/
 .vscode/
 *.swp
 *.swo
+
+# data artifacts
+data/processed/
+*.pkl
+
