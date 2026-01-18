@@ -1,254 +1,81 @@
-# Beijing Multi-Site Air Quality — Classification + Regression + Time Series (ARIMA)
+# Báo Cáo Dự Án: Dự Báo Chất Lượng Không Khí Beijing (PM2.5)
+---
 
-Phân tích dữ liệu chất lượng không khí **Beijing Multi-Site Air Quality (12 stations)** để xây dựng một pipeline hoàn chỉnh gồm:
+## 1. Giới thiệu
+Dự án nhằm mục tiêu xây dựng pipeline dự báo nồng độ bụi mịn PM2.5 theo giờ tại Bắc Kinh (trạm Aotizhongxin). Chúng tôi áp dụng hai phương pháp tiếp cận:
+1. **Regression Baseline**: Hồi quy có giám sát sử dụng đặc trưng trễ (Lag features) và biến thời gian.
+2. **ARIMA**: Mô hình chuỗi thời gian đơn biến (Univariate Time Series).
 
-- **Phân lớp mức độ ô nhiễm (AQI level)**: tạo nhãn từ **PM2.5 rolling 24h**, nhưng **KHÔNG dùng PM2.5** trong tập đặc trưng đầu vào (tránh leakage).
-- **Hồi quy (Regression)**: dự đoán **PM2.5 tương lai** theo horizon (ví dụ t+1, t+24…).
-- **Chuỗi thời gian (Time Series)**: phân tích đặc điểm dữ liệu time series “đúng bài giảng” và dự báo **chỉ dùng ARIMA** (statsmodels).
+## 2. Kết luận Chiến lược
+> **Khả năng triển khai**: Mô hình **Regression Baseline** vượt trội hoàn toàn về độ chính xác ngắn hạn (RMSE ~25) so với ARIMA (RMSE ~104) trong bối cảnh dự báo thời gian thực (Horizon=1).
 
-Project triển khai theo pipeline notebook → module hoá trong `src/` → tự động chạy bằng **Papermill** để phục vụ giảng dạy & demo ra quyết định chọn mô hình.
+**Lý do chính**: Regression tận dụng được dữ liệu "tươi" nhất (PM2.5 tại giờ trước đó) để dự báo giờ tiếp theo liên tục. Trong khi ARIMA (cấu hình hiện tại) thực hiện dự báo dài hạn (long-term forecast) dẫn đến sai số tích lũy lớn.
 
 ---
 
-## Features
+## 3. Phân tính Chi tiết & Trả lời Câu hỏi Thực hành
 
-### 1) Classification (No PM2.5 in features)
-- Load & merge dữ liệu từ nhiều trạm
-- Làm sạch dữ liệu: missing, kiểu thời gian, chuẩn hoá numeric/object
-- Tạo nhãn **AQI class** từ `pm25_24h` (rolling mean 24h)
-- **Không dùng PM2.5 / pm25_24h làm feature**
-- Đánh giá: Accuracy, Precision/Recall/F1, Confusion Matrix
-- Lưu artifacts: metrics + prediction sample
+### Q1: Phân tích Dữ liệu Chuỗi thời gian (EDA)
+**1. Tổng quan Xu hướng PM2.5:**
+![PM2.5 Overview](images/eda_pm25_full.png)
+*Hình 1: Chuỗi thời gian PM2.5 (2013-2017).*
 
-### 2) Regression (Supervised)
-- Tạo bài toán hồi quy theo time-based split (tránh leakage)
-- Feature engineering cho hồi quy:
-  - time features (hour/day/month/…)
-  - lag features (theo cấu hình)
-- Dự đoán `PM2.5(t + horizon)`
-- Đánh giá: RMSE, MAE, R2
-- Lưu artifacts: model + metrics + prediction sample
+Có thể thấy tính mùa vụ rõ rệt (cao điểm vào mùa đông) và các đợt ô nhiễm đột biến (spikes) xuất hiện thường xuyên.
 
-### 3) Time Series Forecasting (ARIMA only)
-- Xây dựng chuỗi đơn biến theo **1 trạm** (univariate PM2.5)
-- Phân tích đặc điểm dữ liệu chuỗi thời gian “đúng bài giảng”:
-  - missingness & resampling
-  - rolling mean/std
-  - stationarity tests (ADF/KPSS)
-  - ACF/PACF để định hướng p,q
-  - quyết định d (sai phân) theo kiểm định + quan sát
-- Fit & chọn ARIMA theo AIC/BIC (grid nhỏ)
-- Dự báo + lưu artifacts: summary, predictions, model
+**2. Tính dừng & Tự tương quan:**
+![ACF/PACF Plots](images/eda_acf_pacf.png)
+*Hình 2: Biểu đồ ACF/PACF.*
+- **Tính liên tục**: Dữ liệu có tính chu kỳ ngày (24h) và tuần (168h).
+- **Tự tương quan (Autocorrelation)**:
+    - **Lag 24h (~0.40)**: Tương quan khá mạnh, phản ánh nhịp sinh hoạt và thời tiết lặp lại theo ngày.
+    - **Lag 168h (~0.01)**: Tương quan yếu, cho thấy biến động PM2.5 ít có tính chu kỳ tuần cố định hơn so với chu kỳ ngày.
+- **Tính dừng (Stationarity)**:
+    - Kiểm định ADF cho p-value ~ 0.0 -> Chuỗi có xu hướng dừng (hoặc gần dừng) sau khi xử lý missing, đủ điều kiện để chạy ARIMA.
+
+### Q2: Đánh giá Baseline Regression
+![Regression Predictions](images/regression_pred_sample.png)
+*Hình 3: Dự báo Regression vs Thực tế (Mẫu 500 giờ đầu).*
+- **Quan sát**: Đường dự báo (Cam) bám rất sát đường thực tế (Xanh). Điều này nhờ vào feature `PM2.5_lag1`, mô hình học được bài học "giá trị giờ trước là dự báo tốt nhất cho giờ sau".
+
+![Regression Residuals](images/regression_residuals.png)
+*Hình 4: Phần dư (Sai số) của mô hình Regression.*
+- **Kết quả**: 
+    - **RMSE: 25.33** | **MAE: 12.32**
+    - R-squared: 0.95 (Rất tốt)
+- **Phân tích sai số**:
+    - Phần dư dao động quanh 0, nhưng có những điểm vọt lố (spikes) rất cao (sai số > 100). Đây là thời điểm chất lượng không khí thay đổi đột ngột (gió mùa về, bão bụi) mà mô hình chưa kịp thích ứng chỉ sau 1 giờ.
+
+### Q3: Phân tích ARIMA (1, 0, 3)
+![ARIMA Forecast](images/arima_forecast_sample.png)
+*Hình 5: Dự báo ARIMA (Forecast Horizon dài).*
+- **Quan sát**: Trái ngược với Regression, đường dự báo ARIMA (Cam) nhanh chóng đi về mức trung bình và nằm ngang, không bắt được các dao động thực tế.
+
+- **Kết quả**:
+    - **RMSE: 104.10** | **MAE: 77.69**
+- **Tại sao kém hơn Regression?**:
+    - Pipeline hiện tại chạy ARIMA theo chế độ dự báo dài hạn (forecast toàn bộ tập test một lần).
+    - Không cập nhật (re-fit hoặc update) dữ liệu lịch sử mới nhất cho mô hình sau mỗi bước dự báo.
+    - **Bài học**: ARIMA truyền thống không phù hợp cho "Online Forecasting" nếu không được thiết kế dạng Rolling/Expanding window.
 
 ---
 
-## Project Structure
+## 4. Chủ đề Nâng cao: So sánh Regression vs ARIMA
 
-```text
-air_quality_timeseries/
-├── data/
-│   ├── raw/
-│   │   └── PRSA2017_Data_20130301-20170228.zip
-│   └── processed/
-│       ├── cleaned.parquet
-│       ├── dataset_for_clf.parquet
-│       ├── metrics.json
-│       ├── predictions_sample.csv
-│       ├── dataset_for_regression.parquet
-│       ├── regressor.joblib
-│       ├── regression_metrics.json
-│       ├── regression_predictions_sample.csv
-│       ├── arima_pm25_summary.json
-│       ├── arima_pm25_predictions.csv
-│       └── arima_pm25_model.pkl
-│
-├── notebooks/
-│   ├── preprocessing_and_eda.ipynb
-│   ├── feature_preparation.ipynb
-│   ├── classification_modelling.ipynb
-│   ├── regression_modelling.ipynb
-│   ├── arima_forecasting.ipynb
-│   └── runs/
-│       ├── preprocessing_and_eda_run.ipynb
-│       ├── feature_preparation_run.ipynb
-│       ├── classification_modelling_run.ipynb
-│       ├── regression_modelling_run.ipynb
-│       └── arima_forecasting_run.ipynb
-│
-├── src/
-│   ├── classification_library.py
-│   ├── regression_library.py
-│   ├── timeseries_library.py
-│   └── __init__.py
-│
-├── run_papermill.py
-├── requirements.txt
-└── README.md
+| Tiêu chí        | Regression Baseline             | ARIMA (Forecasting)                       | Nhận xét                                 |
+| :-------------- | :------------------------------ | :---------------------------------------- | :--------------------------------------- |
+| **Cơ chế**      | Dự báo 1 bước (dùng t-1 đoán t) | Dự báo nhiều bước (dùng t đoán t+1...t+n) | Regression lợi thế nhờ cập nhật liên tục |
+| **RMSE**        | **25.33** (Tốt)                 | 104.10 (Kém)                              | Regression bám sát thực tế hơn           |
+| **Xử lý Spike** | Phản ứng nhanh (có độ trễ 1h)   | Bị mượt hoá (phẳng), không bắt được đỉnh  | Regression tốt hơn cho cảnh báo sớm      |
+| **Tốc độ**      | Rất nhanh (Fit 1 lần)           | Chậm (Đặc biệt nếu Re-fit liên tục)       | Regression scalable hơn                  |
 
-```
+### Câu trả lời cho Chủ đề 1:
+1. **Hiệu suất H=1**: Regression chiến thắng tuyệt đối.
+2. **Khả năng bắt Spike**: Regression phản ứng tốt hơn nhờ biến Lag 1h và 24h giữ thông tin về mức độ ô nhiễm hiện tại. ARIMA có xu hướng quay về giá trị trung bình (mean reversion) khi dự báo xa.
+3. **Lựa chọn triển khai**: Chọn **Regression** (hoặc nâng cấp lên GBM/LSTM). Nó đơn giản, dễ thêm biến phụ trợ (mưa, gió, thứ trong tuần) và dễ bảo trì hệ thống Real-time.
 
-## Installation
+---
 
-```bash
-git clone <your_repo_url>
-cd air_quality_timeseries
-pip install -r requirements.txt
-```
-
-## Data Preparation
-
-Đặt file gốc vào:
-```
-
-```bash
-data/raw/PRSA2017_Data_20130301-20170228.zip
-```
-Hoặc tải dataset Beijing Multi-Site Air Quality Data (UCI) và đặt các file trạm vào:
-
-```bash 
-data/raw/
-```
-Ví dụ
-
-```bash
-data/raw/station_01.csv
-data/raw/station_02.csv
-...
-data/raw/station_12.csv
-```
-
-File output sẽ được sinh tự động vào:
-```bash
-data/processed/
-```
-
-
-
-Run Pipeline (Recommended)
-Chạy toàn bộ phân tích chỉ với 1 lệnh:
-
-```bash
-python run_papermill.py
-```
-Kết quả sinh ra:
-
-```bash
-data/processed/cleaned.parquet
-data/processed/dataset_for_clf.parquet
-data/processed/metrics.json
-data/processed/predictions_sample.csv
-
-data/processed/dataset_for_regression.parquet
-data/processed/regressor.joblib
-data/processed/regression_metrics.json
-data/processed/regression_predictions_sample.csv
-
-data/processed/arima_pm25_summary.json
-data/processed/arima_pm25_predictions.csv
-data/processed/arima_pm25_model.pkl
-
-notebooks/runs/arima_forecasting_run.ipynb
-```
-
-### Changing Parameters
-Các tham số có thể chỉnh trong run_papermill.py:
-
-#### Preprocessing/EDA
-```python
-USE_UCIMLREPO = False
-RAW_ZIP_PATH = "data/raw/PRSA2017_Data_20130301-20170228.zip"
-LAG_HOURS = [1, 3, 24]
-```
-
-#### Classification
-```python
-CUTOFF = "2017-01-01"   # time-based split
-# (PM2.5 bị loại khỏi features trong library để tránh leakage)
-```
-
-#### Regression
-```python
-HORIZON = 1                       # dự đoán PM2.5(t + HORIZON)
-TARGET_COL = "PM2.5"
-OUTPUT_REG_DATASET_PATH = "data/processed/dataset_for_regression.parquet"
-CUTOFF = "2017-01-01"
-MODEL_OUT = "regressor.joblib"
-METRICS_OUT = "regression_metrics.json"
-PRED_SAMPLE_OUT = "regression_predictions_sample.csv"
-```
-
-#### ARIMA 
-```
-STATION = "Aotizhongxin"
-VALUE_COL = "PM2.5"
-CUTOFF = "2017-01-01"
-
-P_MAX = 3
-Q_MAX = 3
-D_MAX = 2
-IC = "aic"                         # hoặc "bic"
-ARTIFACTS_PREFIX = "arima_pm25"
-```
-
-
-Hoặc sửa trong cell PARAMETERS của mỗi notebook để chạy với cấu hình khác nhau.
-
-### Visualization & Results
-
-Notebook preprocessing_and_eda.ipynb:
-
-  kiểm tra missingness, phân phối, xu hướng theo thời gian
-
-  gợi ý seasonality (24h, tuần) để định hướng mô hình
-
-Notebook regression_modelling.ipynb:
-
-  dự đoán PM2.5(t+h), đánh giá RMSE/MAE/R2, minh hoạ leakage và lý do time-split
-
-Notebook arima_forecasting.ipynb:
-
-  ADF/KPSS, rolling mean/std, ACF/PACF
-
-  chọn (p,d,q) theo AIC/BIC và dự báo ARIMA
-
-Bạn có thể export notebook chạy ra HTML:
-
-```bash
-jupyter nbconvert notebooks/runs/03_classification_modelling_run.ipynb --to html
-```
-
-## Ứng dụng thực tế 
-
-Thiết kế bài giảng “end-to-end”:
-
-  phân lớp mức độ ô nhiễm (classification) + chống leakage
-
-  hồi quy dự đoán chỉ số PM2.5 tương lai (regression)
-
-  phân tích chuỗi thời gian và quyết định dùng ARIMA (time series)
-
-Demo ra quyết định mô hình dựa trên:
-
-  stationarity (ADF/KPSS), ACF/PACF
-
-  tiêu chí IC (AIC/BIC) và kiểm tra sai số dự báo
-
-### Tech Stack
-
-| Công nghệ | Mục đích |
-|----------|----------|
-| Python | Ngôn ngữ chính |
-| Pandas | Xử lý dữ liệu transaction |
-| Scikit-learn | Modelling & metrics |
-| Statsmodels  | ARIMA               |
-| Papermill | Chạy pipeline notebook tự động |
-| Matplotlib & Seaborn | Visualization biểu đồ tĩnh |
-| Plotly | Dashboard / biểu đồ tương tác |
-| Jupyter Notebook | Môi trường notebook |
-
-### Author
-Project được thực hiện bởi:
-Trang Le
-
-### License
-MIT — sử dụng tự do cho nghiên cứu, học thuật và ứng dụng nội bộ.
+## 5. Khuyến nghị Hành động (Dành cho nhà quản lý)
+1. **Hệ thống cảnh báo**: Nên triển khai mô hình Regression để dự báo trước 1 giờ. Độ chính xác hiện tại (MAE ~12 đơn vị PM2.5) là chấp nhận được để phát cảnh báo mức độ "Có hại" hay "Nguy hại".
+2. **Cải thiện mô hình**: Tập trung xử lý các điểm "Spike" (đỉnh ô nhiễm đột ngột). Có thể thêm feature "tốc độ gió" (WSPM) vì gió mạnh thường làm giảm PM2.5 nhanh chóng.
+3. **Vận hành**: Thiết lập pipeline tự động (như `run_papermill.py`) để tái huấn luyện mô hình định kỳ hàng tuần, cập nhật xu hướng mùa vụ mới.
