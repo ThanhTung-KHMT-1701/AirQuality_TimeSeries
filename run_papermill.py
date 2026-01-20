@@ -77,7 +77,7 @@ pm.execute_notebook(
         Q_MAX=3,
         D_MAX=2,
         IC="aic",
-        ARTIFACTS_PREFIX="arima_pm25",
+        ARTIFACTS_PREFIX="05_arima_pm25",
     ),
     language="python",
     kernel_name=KERNEL
