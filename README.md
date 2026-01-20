@@ -144,18 +144,80 @@ Dựa trên nồng độ PM2.5 trung bình 24 giờ:
 
 **Cấu hình**:
 - Trạm: Aotizhongxin
-- Grid search: p ∈ [0,3], d ∈ [0,2], q ∈ [0,3]
+- Grid search: p ∈ [0,3], d ∈ [0,1], q ∈ [0,3]
 - Tiêu chí chọn: AIC (Akaike Information Criterion)
 - **Order tối ưu được chọn**: ARIMA(1, 0, 3)
+
+**Thống kê dữ liệu (Aotizhongxin)**:
+- Số mẫu: 35,064
+- Giá trị: min = 3.0, max = 898.0, mean = 82.54, std = 81.96
+- ADF p-value ≈ 0.0 → Chuỗi dừng (stationary)
+
+### 4.3. ARIMA Grid Search (Spark.ipynb)
+
+**Mục tiêu**: Thử nghiệm hệ thống các tổ hợp (p, d, q) để tìm tham số tối ưu.
+
+**Ý nghĩa các tham số**:
+| Tham số | Ý nghĩa | Tác động |
+|---------|---------|----------|
+| **p (AR)** | Số lag trong autoregressive terms | p cao → model phức tạp, capture pattern dài hạn |
+| **d (Diff)** | Số lần differencing | d=0 nếu chuỗi dừng, d=1 nếu có trend |
+| **q (MA)** | Kích thước moving average window | q cao → smoothing nhiều hơn |
+
+**Kết quả Grid Search**:
+
+![AIC Heatmap](images/Spark_aic_heatmap.png)
+*Hình: Heatmap AIC theo các tổ hợp (p, d, q).*
+
+![MAE Heatmap](images/Spark_mae_heatmap.png)
+*Hình: Heatmap MAE theo các tổ hợp (p, d, q).*
+
+![Top 10 Models](images/Spark_top10_comparison.png)
+*Hình: So sánh Top 10 mô hình ARIMA theo nhiều tiêu chí.*
+
+![Parameter Impact](images/Spark_parameter_impact.png)
+*Hình: Tác động của từng tham số đến hiệu suất mô hình.*
+
+### 4.4. SARIMA (Seasonal ARIMA)
+
+**Ý tưởng**: Mở rộng ARIMA với thành phần mùa vụ để bắt chu kỳ ngày (24 giờ).
+
+**Cấu hình tối ưu**: SARIMA(2, 0, 1)(1, 0, 1, 24)
+
+| Model | AIC | BIC | MAE | RMSE |
+|-------|-----|-----|-----|------|
+| ARIMA(2,0,1) | 42,466.80 | 42,492.86 | 93.99 | 132.82 |
+| SARIMA(2,0,1)(1,0,1,24) | 42,268.84 | 42,307.91 | 94.62 | 133.61 |
+
+> **Nhận xét**: SARIMA có AIC thấp hơn (~198 điểm) nhưng MAE/RMSE tương đương ARIMA.
 
 ---
 
 ## 5. Kết quả & So sánh
 
-### 5.1. Kết quả Regression
+### 5.1. Kết quả Classification
+
+![Confusion Matrix](images/03_confusion_matrix.png)
+*Hình: Ma trận nhầm lẫn của mô hình Classification.*
+
+| Lớp | Precision | Recall | F1-Score | Support |
+|-----|-----------|--------|----------|---------|
+| Good | 0.00 | 0.00 | 0.00 | 1,032 |
+| Moderate | 0.61 | 0.86 | 0.71 | 4,833 |
+| Unhealthy for Sensitive Groups | 0.40 | 0.16 | 0.23 | 2,166 |
+| Unhealthy | 0.61 | 0.68 | 0.64 | 4,286 |
+| Very Unhealthy | 0.55 | 0.65 | 0.60 | 2,499 |
+| Hazardous | 0.84 | 0.54 | 0.65 | 1,855 |
+| **Accuracy** | | | **0.60** | 16,671 |
+| **Macro Avg** | 0.50 | 0.48 | 0.47 | 16,671 |
+
+### 5.2. Kết quả Regression
 
 ![Regression Actual vs Predicted](images/04_actual_vs_predicted.png)
-*Hình 5: So sánh giá trị thực tế và dự báo từ mô hình Regression.*
+*Hình: So sánh giá trị thực tế và dự báo từ mô hình Regression.*
+
+![Target Distribution](images/04_target_distribution.png)
+*Hình: Phân phối biến mục tiêu PM2.5.*
 
 **Diễn giải:**
 - Đường dự báo (màu cam) **bám rất sát** đường thực tế (màu xanh), đặc biệt ở các khoảng PM2.5 ổn định.
@@ -169,10 +231,10 @@ Dựa trên nồng độ PM2.5 trung bình 24 giờ:
 | **R²** | 0.949 | Mô hình giải thích được 94.9% biến thiên |
 | **SMAPE** | 23.8% | Sai số phần trăm đối xứng |
 
-### 5.2. Kết quả ARIMA
+### 5.3. Kết quả ARIMA
 
 ![ARIMA Forecast](images/05_forecast_vs_actual.png)
-*Hình 6: Dự báo ARIMA so với giá trị thực tế trong giai đoạn test.*
+*Hình: Dự báo ARIMA so với giá trị thực tế trong giai đoạn test.*
 
 **Diễn giải:**
 - Đường dự báo ARIMA **nhanh chóng hội tụ về giá trị trung bình** (~82 µg/m³) và nằm gần như phẳng.
@@ -183,8 +245,42 @@ Dựa trên nồng độ PM2.5 trung bình 24 giờ:
 |--------|---------|
 | **RMSE** | 104.10 |
 | **MAE** | 77.69 |
+| **Best Order** | ARIMA(1, 0, 3) |
+| **AIC** | 294,792.71 |
 
-### 5.3. Bảng so sánh tổng hợp
+### 5.4. ARIMA Grid Search Results
+
+![Forecast Comparison](images/Spark_forecast_comparison.png)
+*Hình: So sánh dự báo giữa các mô hình ARIMA tốt nhất và tệ nhất.*
+
+![AIC vs MAE](images/Spark_aic_vs_mae.png)
+*Hình: Trade-off giữa AIC và MAE cho các cấu hình ARIMA.*
+
+### 5.5. So sánh ARIMA vs SARIMA
+
+![ARIMA vs SARIMA](images/Topic_arima_vs_sarima_forecast.png)
+*Hình: So sánh dự báo ARIMA và SARIMA.*
+
+![Comparison Overlay](images/Topic_comparison_overlay.png)
+*Hình: So sánh tổng quan các mô hình.*
+
+### 5.6. Phân tích Residuals & Spike
+
+![Residual Diagnostics](images/Topic_residual_diagnostics.png)
+*Hình: Phân tích residual của mô hình ARIMA.*
+
+![Error Distribution](images/Topic_error_distribution.png)
+*Hình: Phân phối sai số dự báo.*
+
+![Spike Analysis](images/Topic_spike_analysis.png)
+*Hình: Phân tích khả năng dự báo các đợt ô nhiễm đột biến.*
+
+| Model | Residual Mean | Residual Std | MAE (Spike) | RMSE (Spike) |
+|-------|---------------|--------------|-------------|--------------|
+| ARIMA | 1.17 | 16.91 | - | - |
+| Regression | - | - | 30.15 | 43.23 |
+
+### 5.7. Bảng so sánh tổng hợp
 
 | Tiêu chí | Regression | ARIMA | Nhận xét |
 |----------|------------|-------|----------|
@@ -294,14 +390,32 @@ AirQuality_TimeSeries/
 ├── data/
 │   ├── raw/                 # Dữ liệu gốc (12 file CSV)
 │   └── processed/           # Dữ liệu đã xử lý + kết quả
+│       ├── 01_*.csv         # Preprocessing & EDA
+│       ├── 02_*.csv         # Feature preparation
+│       ├── 03_*.csv/json    # Classification results
+│       ├── 04_*.csv/json    # Regression results
+│       ├── 05_*.csv/json    # ARIMA results
+│       ├── Spark_*.csv      # ARIMA Grid Search results
+│       └── Topic_*.csv      # SARIMA comparison
 ├── images/                  # Biểu đồ xuất ra
+│   ├── 01_*.png             # EDA charts
+│   ├── 03_*.png             # Classification charts
+│   ├── 04_*.png             # Regression charts
+│   ├── 05_*.png             # ARIMA charts
+│   ├── Spark_*.png          # Grid Search charts
+│   └── Topic_*.png          # SARIMA comparison charts
 ├── notebooks/
 │   ├── 01_preprocessing_and_eda.ipynb
 │   ├── 02_feature_preparation.ipynb
 │   ├── 03_classification_modelling.ipynb
 │   ├── 04_regression_modelling.ipynb
-│   └── 05_arima_forecasting_run.ipynb
+│   ├── 05_arima_forecasting.ipynb
+│   ├── Spark.ipynb          # ARIMA Grid Search
+│   └── Topic.ipynb          # ARIMA vs SARIMA comparison
 ├── src/                     # Library code
+│   ├── classification_library.py
+│   ├── regression_library.py
+│   └── timeseries_library.py
 ├── run_papermill.py         # Script chạy pipeline
 ├── requirements.txt
 └── README.md
@@ -315,13 +429,65 @@ AirQuality_TimeSeries/
 | Bài toán | Mô hình tốt nhất | Metric chính |
 |----------|-----------------|--------------|
 | Dự báo PM2.5 (1h) | **Regression** | RMSE = 25.33, R² = 0.949 |
-| Phân loại AQI | HistGradientBoosting | Accuracy = 60.2% |
-| Time-series | ARIMA(1,0,3) | RMSE = 104.10 |
+| Phân loại AQI | HistGradientBoosting | Accuracy = 60.2%, F1-macro = 0.47 |
+| Time-series ARIMA | ARIMA(1,0,3) | RMSE = 104.10, MAE = 77.69 |
+| Time-series SARIMA | SARIMA(2,0,1)(1,0,1,24) | AIC = 42,268.84 |
+| ARIMA Grid Search | Best by AIC/MAE | Varied by criteria |
+
+### Danh sách các file dữ liệu đầu ra
+
+#### Data Files (CSV/JSON)
+| File | Mô tả |
+|------|-------|
+| 01_class_distribution.csv | Phân bố các lớp AQI |
+| 01_cleaned.csv | Dữ liệu đã làm sạch |
+| 01_missing_rate.csv | Tỷ lệ dữ liệu thiếu |
+| 02_feature_list.csv | Danh sách đặc trưng |
+| 03_classification_report.csv | Báo cáo phân loại chi tiết |
+| 03_metrics.json | Metrics classification |
+| 04_regression_metrics.json | Metrics regression |
+| 04_regression_predictions.csv | Dự báo từ mô hình regression |
+| 05_arima_pm25_summary.json | Tóm tắt kết quả ARIMA |
+| 05_arima_pm25_predictions.csv | Dự báo từ mô hình ARIMA |
+| Spark_grid_search_results.csv | Kết quả Grid Search ARIMA |
+| Spark_best_models_summary.csv | Tóm tắt các mô hình tốt nhất |
+| Topic_metrics_comparison.csv | So sánh metrics các mô hình |
+| Topic_sarima_comparison.csv | So sánh ARIMA vs SARIMA |
+| Topic_residual_statistics.csv | Thống kê residual |
+| Topic_spike_metrics.csv | Metrics cho các đợt spike |
+
+#### Image Files (PNG)
+| File | Mô tả |
+|------|-------|
+| 01_class_distribution.png | Biểu đồ phân bố lớp AQI |
+| 03_confusion_matrix.png | Ma trận nhầm lẫn |
+| 04_actual_vs_predicted.png | Thực tế vs Dự báo (Regression) |
+| 04_target_distribution.png | Phân phối biến mục tiêu |
+| 05_acf_plot.png | Biểu đồ ACF |
+| 05_pacf_plot.png | Biểu đồ PACF |
+| 05_forecast_vs_actual.png | Dự báo ARIMA vs Thực tế |
+| 05_hourly_seasonality.png | Tính mùa vụ theo giờ |
+| 05_raw_timeseries_30days.png | Chuỗi thời gian 30 ngày |
+| 05_rolling_statistics.png | Rolling statistics |
+| Spark_aic_heatmap.png | Heatmap AIC Grid Search |
+| Spark_mae_heatmap.png | Heatmap MAE Grid Search |
+| Spark_top10_comparison.png | So sánh Top 10 ARIMA models |
+| Spark_parameter_impact.png | Tác động của từng tham số |
+| Spark_forecast_comparison.png | So sánh dự báo các models |
+| Spark_aic_vs_mae.png | Trade-off AIC vs MAE |
+| Topic_acf_seasonality_proof.png | Chứng minh tính mùa vụ |
+| Topic_arima_vs_sarima_forecast.png | So sánh ARIMA vs SARIMA |
+| Topic_comparison_overlay.png | So sánh tổng quan |
+| Topic_error_distribution.png | Phân phối sai số |
+| Topic_forecast_comparison.png | So sánh dự báo |
+| Topic_residual_diagnostics.png | Phân tích residual |
+| Topic_spike_analysis.png | Phân tích spike |
 
 ### Khuyến nghị triển khai
 1. **Hệ thống cảnh báo**: Sử dụng mô hình Regression với dự báo rolling mỗi giờ
 2. **Ngưỡng cảnh báo**: MAE ~12 µg/m³ đủ tin cậy cho các mức nguy hiểm
-3. **Cải tiến tương lai**: Tích hợp dữ liệu dự báo thời tiết + mô hình deep learning (LSTM)
+3. **ARIMA Grid Search**: Tham khảo notebook Spark.ipynb để chọn tham số phù hợp mục tiêu
+4. **Cải tiến tương lai**: Tích hợp dữ liệu dự báo thời tiết + mô hình deep learning (LSTM)
 
 ---
 
