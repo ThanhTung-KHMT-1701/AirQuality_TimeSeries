@@ -1,219 +1,495 @@
-# Phân Tích & Dự Báo Chất Lượng Không Khí Bắc Kinh (PM2.5)
+# Dự Báo Chất Lượng Không Khí Bắc Kinh (PM2.5)
+
+> **Dự án phân tích và dự báo nồng độ bụi mịn PM2.5 theo giờ tại Bắc Kinh (2013-2017)**
+
+---
 
 ## 📑 Mục lục
 
-1. [Giới thiệu & Bối cảnh](#1-giới-thiệu--bối-cảnh)
-2. [Khám phá Dữ liệu (EDA)](#2-khám-phá-dữ-liệu-eda)
-3. [Phương pháp tiếp cận](#3-phương-pháp-tiếp-cận)
-4. [So sánh Mô hình: Regression vs ARIMA](#4-so-sánh-mô-hình-regression-vs-arima-chủ-đề-1)
-5. [Nâng cấp Mùa vụ: SARIMA](#5-nâng-cấp-mùa-vụ-sarima-chủ-đề-2)
-6. [Insights & Khuyến nghị Quản lý](#6-5-insights--khuyến-nghị-cho-người-quản-lý)
-7. [Kết luận & Hướng dẫn kỹ thuật](#7-kết-luận--hướng-dẫn-kỹ-thuật)
+1. [Giới thiệu](#1-giới-thiệu)
+2. [Dữ liệu](#2-dữ-liệu)
+3. [Phân tích Khám phá Dữ liệu (EDA)](#3-phân-tích-khám-phá-dữ-liệu-eda)
+4. [Mô hình Dự báo](#4-mô-hình-dự-báo)
+5. [Kết quả & So sánh](#5-kết-quả--so-sánh)
+6. [Insights & Khuyến nghị](#6-insights--khuyến-nghị)
+7. [Hướng dẫn Cài đặt & Chạy](#7-hướng-dẫn-cài-đặt--chạy)
+8. [Kết luận](#8-kết-luận)
 
 ---
 
-## 1. 🏙️ Giới thiệu & Bối cảnh
+## 1. Giới thiệu
 
-Ô nhiễm không khí, đặc biệt là bụi mịn PM2.5, là vấn đề cấp bách tại các đô thị lớn như Bắc Kinh. Việc dự báo chính xác nồng độ PM2.5 không chỉ là bài toán kỹ thuật mà còn là cơ sở quan trọng để các nhà quản lý đưa ra cảnh báo sức khỏe kịp thời cho người dân.
+### Bối cảnh
+Ô nhiễm không khí tại Bắc Kinh là vấn đề sức khỏe cộng đồng nghiêm trọng. **PM2.5** (bụi mịn đường kính ≤ 2.5 micromet) là chỉ số quan trọng nhất vì chúng có thể xâm nhập sâu vào phổi và máu, gây ra các bệnh hô hấp và tim mạch.
 
-Dự án này sử dụng dữ liệu quan trắc theo giờ từ 03/2013 đến 02/2017 tại trạm **Aotizhongxin** để:
+### Mục tiêu
+- Phân tích xu hướng và tính mùa vụ của PM2.5
+- Xây dựng mô hình dự báo PM2.5 cho **1 giờ tiếp theo**
+- So sánh hiệu quả giữa **Regression** (học có giám sát) và **ARIMA** (chuỗi thời gian)
+- Đưa ra khuyến nghị cho hệ thống cảnh báo sớm
 
-1.  Hiểu rõ đặc tính biến động của PM2.5.
-2.  Xây dựng và so sánh các mô hình dự báo ngắn hạn (Regression vs ARIMA).
-3.  Đề xuất giải pháp cảnh báo sớm hiệu quả.
+### Phương pháp tiếp cận
+| Phương pháp | Mô tả |
+|-------------|-------|
+| **Regression Baseline** | Sử dụng đặc trưng trễ (lag features) và biến thời gian để dự báo |
+| **ARIMA** | Mô hình chuỗi thời gian đơn biến (AutoRegressive Integrated Moving Average) |
 
 ---
 
-## 2. 📊 Khám phá Dữ liệu (EDA)
+## 2. Dữ liệu
 
-Trước khi đi vào mô hình hóa, chúng tôi đã kiểm tra kỹ lưỡng chất lượng dữ liệu. Dữ liệu phủ kín từ 01/03/2013 đến 28/02/2017 với tần suất **liên tục từng giờ**, đảm bảo không có khoảng trống lớn về thời gian làm đứt gãy chuỗi.
+### Nguồn dữ liệu
+- **Dataset**: Beijing Multi-Site Air Quality Data (UCI Machine Learning Repository)
+- **Thời gian**: 01/03/2013 - 28/02/2017 (~4 năm)
+- **Tần suất**: Theo giờ
+- **Số trạm đo**: 12 trạm trên khắp Bắc Kinh
 
-### **Hình 1: Chuỗi thời gian PM2.5 toàn giai đoạn**
+### Các biến chính
 
-![Rolling Statistics](images/05_rolling_statistics.png)
+| Nhóm | Biến | Đơn vị | Mô tả |
+|------|------|--------|-------|
+| **Ô nhiễm** | PM2.5 | µg/m³ | Bụi mịn (mục tiêu dự báo) |
+| | PM10 | µg/m³ | Bụi thô |
+| | SO2, NO2, CO, O3 | µg/m³ | Các khí ô nhiễm khác |
+| **Thời tiết** | TEMP | °C | Nhiệt độ |
+| | PRES | hPa | Áp suất khí quyển |
+| | DEWP | °C | Điểm sương |
+| | RAIN | mm | Lượng mưa |
+| | WSPM | m/s | Tốc độ gió |
 
-> 📝 **Diễn giải:**
->
-> - Dữ liệu thể hiện **tính mùa vụ năm rất rõ**: PM2.5 thường lập đỉnh vào mùa đông (tháng 11-12) và giảm thấp vào mùa hè.
-> - Đường trung bình động (Rolling Mean - màu đỏ) tương đối ổn định quanh mức 80-90 µg/m³, không có xu hướng (trend) tăng giảm dài hạn rõ rệt, gợi ý chuỗi có thể dừng ở mức độ năm.
-> - Độ lệch chuẩn (Rolling Std - màu xanh) biến động mạnh tại các đợt ô nhiễm cao điểm, cho thấy phương sai của chuỗi không hằng số (heteroscedasticity).
+### Phân loại chất lượng không khí (AQI)
+Dựa trên nồng độ PM2.5 trung bình 24 giờ:
 
-### **Hình 2: Zoom cận cảnh biến động PM2.5 (30 ngày)**
+| Mức độ | PM2.5 (µg/m³) | Số mẫu | Tỷ lệ |
+|--------|---------------|--------|-------|
+| 🟢 Good | 0 - 9 | 13,924 | 3.4% |
+| 🟡 Moderate | 9.1 - 35.4 | 109,549 | 26.6% |
+| 🟠 Unhealthy for Sensitive Groups | 35.5 - 55.4 | 64,731 | 15.7% |
+| 🔴 Unhealthy | 55.5 - 125.4 | 148,558 | 36.1% |
+| 🟣 Very Unhealthy | 125.5 - 225.4 | 56,242 | 13.7% |
+| ⚫ Hazardous | > 225.4 | 19,931 | 4.8% |
 
-![PM2.5 Zoom](images/05_raw_timeseries_30days.png)
+> **Nhận xét**: Gần **70% thời gian** không khí Bắc Kinh ở mức **không tốt cho sức khỏe trở lên** (Unhealthy+). Chỉ có 3.4% thời gian đạt mức "Tốt".
 
-> 🔍 **Diễn giải:**
->
-> - Ở khung thời gian ngắn, PM2.5 biến động **rất mạnh theo giờ**. Một đợt ô nhiễm có thể tăng vọt từ 50 lên 300 µg/m³ chỉ trong vài tiếng đồng hồ.
-> - Có các "chu kỳ con" ngắn hạn (vài ngày) tương ứng với các đợt hình thành và tan biến của sương mù/bụi.
-> - Các mô hình dự báo cần phải cực kỳ nhạy bén để bắt kịp các dao động nhanh này (spikes), thay vì chỉ dự báo trung bình.
+---
 
-### **Hình 3: Phân phối dữ liệu & Mất cân bằng lớp**
+## 3. Phân tích Khám phá Dữ liệu (EDA)
 
-![Class Distribution](images/01_class_distribution.png)
+### 3.1. Chuỗi thời gian PM2.5 toàn giai đoạn
 
-> ⚖️ **Diễn giải:**
->
-> - Dữ liệu bị **mất cân bằng nghiêm trọng**: Lớp "Unhealthy" (Không lành mạnh) và "Moderate" chiếm đa số, trong khi lớp "Good" (Tốt) chỉ chiếm tỷ lệ rất nhỏ (~3%).
-> - Điều này lý giải vì sao việc dự báo chính xác các ngày "Không khí sạch" khó hơn nhiều so với dự báo ô nhiễm.
-> - **Vấn đề thiếu dữ liệu (Missing Value)**: Tỷ lệ thiếu cao nhất ở các biến khí (CO, NO2 ~4-5%) nhưng PM2.5 chỉ thiếu ~2%. Việc thiếu các biến khí độc hại (CO, NO2) là **đáng lo nhất** vì chúng thường là tiền chất hoặc chỉ thị quan trọng đi kèm với PM2.5, thiếu chúng có thể làm giảm độ chính xác của dự báo regression.
+![PM2.5 Rolling Statistics](images/05_rolling_statistics.png)
+*Hình 1: Chuỗi PM2.5 theo giờ với đường trung bình động (rolling mean) và độ lệch chuẩn.*
 
-### **Hình 4: Tự tương quan (ACF & PACF)**
+**Diễn giải:**
+- Dữ liệu thể hiện **tính mùa vụ rõ rệt**: PM2.5 cao vào mùa đông (tháng 11-2) do đốt than sưởi ấm và điều kiện khí tượng bất lợi.
+- Có nhiều **đợt ô nhiễm đột biến (spikes)** vượt 400-500 µg/m³, đặc biệt vào cuối năm 2015 và đầu 2017.
+- Đường rolling mean cho thấy xu hướng tương đối ổn định, không có trend tăng/giảm rõ ràng theo năm.
+
+### 3.2. PM2.5 chi tiết 30 ngày (Zoom)
+
+![PM2.5 30 Days](images/05_raw_timeseries_30days.png)
+*Hình 2: PM2.5 trong 30 ngày đầu tiên của dữ liệu.*
+
+**Diễn giải:**
+- Ở quy mô ngày, ta thấy **biến động theo chu kỳ ngày đêm**: PM2.5 thường tăng vào buổi sáng (giờ cao điểm giao thông) và giảm vào chiều tối.
+- Các đợt ô nhiễm có thể kéo dài **2-5 ngày liên tục** trước khi được gió hoặc mưa làm sạch.
+- Sự biến động trong ngày có thể lên tới **100-200 µg/m³**, cho thấy tầm quan trọng của dự báo theo giờ.
+
+### 3.3. Tính mùa vụ theo giờ trong ngày
+
+![Hourly Seasonality](images/05_hourly_seasonality.png)
+*Hình 3: Biến động PM2.5 trung bình theo giờ trong ngày.*
+
+**Diễn giải:**
+- PM2.5 có xu hướng **thấp nhất vào khoảng 14h-16h** (buổi chiều) khi nhiệt độ cao, đối lưu không khí mạnh.
+- **Cao nhất vào 1h-3h sáng** (giờ cao điểm đi làm) và **20h-23h** (sinh hoạt buổi tối + nghịch nhiệt ban đêm).
+- Pattern này quan trọng cho việc lập lịch cảnh báo và khuyến cáo người dân.
+
+### 3.4. Biểu đồ ACF và PACF
 
 ![ACF Plot](images/05_acf_plot.png)
+*Hình 4a: Biểu đồ tự tương quan (ACF) - cho thấy mức độ tương quan của chuỗi với chính nó ở các độ trễ khác nhau.*
 
-> 📈 **Diễn giải:**
->
-> - **ACF (trên)**: Giảm dần rất chậm, xác nhận tính "bền vững" (persistence) của ô nhiễm không khí - nếu giờ trước ô nhiễm thì giờ sau khả năng cao vẫn ô nhiễm.
-> - **PACF (dưới)**: Có một cột rất cao ở **Lag 1** (~0.97), sau đó tắt hẳn. Đây là dấu chỉ rõ ràng cho mô hình AR(1) hoặc một quá trình tự hồi quy mạnh.
-> - Có các đỉnh nhỏ ở **Lag 24** trên biểu đồ PACF, gợi ý về **chu kỳ ngày** (sinh hoạt ban ngày vs ban đêm).
+![PACF Plot](images/05_pacf_plot.png)
+*Hình 4b: Biểu đồ tự tương quan riêng phần (PACF) - loại bỏ ảnh hưởng của các lag trung gian.*
 
----
-
-## 3. 🛠️ Phương pháp tiếp cận
-
-### 3.1. Baseline Hồi Quy (Regression)
-
-Chúng tôi xây dựng mô hình **HistGradientBoostingRegressor** với cách tiếp cận supervised learning.
-
-- ❓ **Tại sao dùng Lag 24h?** Lag 24h đại diện cho giá trị PM2.5 tại **cùng giờ ngày hôm trước**. Điều này cực kỳ quan trọng vì khí tượng và hoạt động con người (giao thông, đun nấu) thường lặp lại theo nhịp sinh học 24 giờ.
-- ✂️ **Chia dữ liệu (Train/Test Split)**: Sử dụng **Cutoff thời gian** (Train: trước 2017, Test: từ 2017) thay vì chia ngẫu nhiên (Shuffle). _Lý do_: Dự báo chuỗi thời gian không được phép "nhìn thấy tương lai" (data leakage). Dữ liệu test phải là tương lai của train.
-- 📏 **RMSE vs MAE**:
-  - **RMSE** phạt rất nặng các sai số lớn (do bình phương). Nếu mô hình dự báo lệch 100 đơn vị tại 1 điểm spike, RMSE sẽ tăng vọt.
-  - **MAE** đo lường sai số trung bình thực tế.
-  - Khi **RMSE >> MAE** (ví dụ gấp 1.5 - 2 lần), chứng tỏ mô hình đang gặp khó khăn lớn trong việc bắt các điểm dị biệt (outliers/spikes).
-
-### 3.2. Quy trình quyết định ARIMA
-
-Đối với mô hình ARIMA (AutoRegressive Integrated Moving Average), sinh viên đã tuân thủ quy trình chuẩn:
-
-1.  **Nhận diện 👁️**: Quan sát chuỗi gốc thấy không có xu thế tăng giảm dài hạn, nhưng có biến động mạnh.
-2.  **Kiểm định dừng 🛑**:
-    - Test ADF (Augmented Dickey-Fuller) cho p-value ≈ 0.0 < 0.05.
-    - Kết luận: Chuỗi đã **dừng**. Chọn tham số sai phân **d = 0**.
-3.  **Chọn tham số ứng viên 🎯**:
-    - PACF có spike tại lag 1 → p có thể là 1, 2.
-    - ACF giảm dần → q có thể cần để xử lý phần dư.
-4.  **Grid Search 🔎**: Chạy thử nghiệm các tổ hợp p, q nhỏ (0-3).
-5.  **Lựa chọn ✅**: Chọn mô hình có **AIC thấp nhất** và kiểm tra phần dư (Residuals) xem có gần với nhiễu trắng (white noise) hay chưa. Kết quả chọn model **ARIMA(1, 0, 3)**.
+**Diễn giải:**
+- **ACF giảm dần** nhưng vẫn có ý nghĩa thống kê đến lag 50+, cho thấy dữ liệu có **tính bền vững cao** (persistent).
+- **PACF có spike mạnh tại lag 1** (autocorr ≈ 0.97), sau đó giảm nhanh. Điều này gợi ý mô hình **AR(1)** hoặc **ARIMA với p nhỏ** là phù hợp.
+- Tương quan tại lag 24 (~0.40) xác nhận **chu kỳ ngày** trong dữ liệu.
+- **Kết quả kiểm định**: ADF p-value ≈ 0.0 → Chuỗi **dừng** (stationary), có thể áp dụng ARIMA trực tiếp (d=0).
 
 ---
 
-## 4. ⚔️ So sánh Mô hình: Regression vs ARIMA (Chủ đề 1)
+## 4. Mô hình Dự báo
 
-Chúng tôi đã thực hiện so sánh công bằng trên cùng tập test (2017) với horizon dự báo **1 giờ tới**.
+### 4.1. Regression Baseline
 
-### **Hình 5: So sánh đối đầu (Forecast Comparison)**
+**Ý tưởng**: Sử dụng giá trị PM2.5 ở các thời điểm trước (lag features) cùng với biến thời gian để dự đoán giá trị giờ tiếp theo.
 
-![Forecast Overlay](images/Topic_comparison_overlay.png)
-_(Đường màu cam: Regression, Đường xanh lá: ARIMA, Đường xanh dương: Thực tế)_
+**Đặc trưng sử dụng**:
+- **Lag features**: PM2.5_lag1 (1 giờ trước), PM2.5_lag3 (3 giờ trước), PM2.5_lag24 (24 giờ trước = cùng giờ hôm qua)
+- **Biến thời gian**: hour_sin, hour_cos (mã hóa chu kỳ), dow (ngày trong tuần), is_weekend
+- **Biến thời tiết**: TEMP, PRES, DEWP, RAIN, WSPM và các lag tương ứng
 
-> 🆚 **Diễn giải:**
->
-> - **Regression (Cam)**: Bám rất sát đường thực tế, mô phỏng được các đỉnh nhọn và thung lũng sâu.
-> - **ARIMA (màu đỏ)**: Có xu hướng **mượt hóa** (smoothing) quá mức. Nó dự báo an toàn quanh giá trị trung bình và phản ứng rất chậm với các thay đổi đột ngột.
-> - Tại các điểm cực trị (spike > 400), ARIMA gần như "bỏ cuộc", trong khi Regression vẫn cố gắng vươn lên dù có thể chưa tới đỉnh.
+**Mô hình**: HistGradientBoostingRegressor (scikit-learn)
 
-### **Bảng kết quả định lượng (Horizon = 1)**
+**Phân chia dữ liệu**:
+- Train: Trước 01/01/2017 (~395,301 mẫu)
+- Test: Từ 01/01/2017 (~16,716 mẫu)
 
-| Model          | MAE (Sai số tuyệt đối) | RMSE (Sai số bình phương) | Khả năng bắt Spike  |
-| -------------- | ---------------------- | ------------------------- | ------------------- |
-| **Regression** | **31.62**              | **45.96**                 | Tốt, phản ứng nhanh |
-| **ARIMA**      | 173.35                 | 205.14                    | Rất kém, bị trễ     |
+### 4.2. ARIMA
 
-### **Trả lời câu hỏi chuyên sâu:**
+**Ý tưởng**: Mô hình chuỗi thời gian đơn biến, chỉ dựa vào lịch sử của chính PM2.5 để dự báo.
 
-1.  **Mô hình nào tốt hơn cho horizon=1?**
-    - **Regression vượt trội hoàn toàn**.
-    - _Lý do_: PM2.5 có tính quán tính cao, giá trị giờ trước (`lag1`) là thông tin quan trọng nhất. Regression tận dụng trực tiếp `lag1` như một đặc trưng đầu vào, cộng thêm thông tin giờ trong ngày (`hour`) và thời tiết, giúp nó "bắt bài" ngay lập tức giá trị tiếp theo. ARIMA thuần túy dựa vào cấu trúc tự tương quan, đôi khi bị nhiễu bởi lịch sử quá xa.
+**Cấu hình**:
+- Trạm: Aotizhongxin
+- Grid search: p ∈ [0,3], d ∈ [0,1], q ∈ [0,3]
+- Tiêu chí chọn: AIC (Akaike Information Criterion)
+- **Order tối ưu được chọn**: ARIMA(1, 0, 3)
 
-2.  **Mô hình nào ổn hơn khi có spike?**
-    - **Regression ổn hơn**. Nhìn vào hình vẽ so sánh, đường màu cam (Regression) có thể leo lên các đỉnh cao, trong khi ARIMA thường nằm phẳng lì ở dưới.
-    - Sự chênh lệch khổng lồ giữa RMSE ARIMA (205) và MAE ARIMA (173) so với Regression (46/31) chứng tỏ ARIMA phạm sai lầm cực lớn tại các điểm spike này.
+**Thống kê dữ liệu (Aotizhongxin)**:
+- Số mẫu: 35,064
+- Giá trị: min = 3.0, max = 898.0, mean = 82.54, std = 81.96
+- ADF p-value ≈ 0.0 → Chuỗi dừng (stationary)
 
-3.  **Nếu triển khai thật, bạn chọn gì?**
-    - Tôi chọn **Regression**.
-    - _Lý do_:
-      - **Hiệu năng**: Chính xác hơn gấp 5 lần về chỉ số sai số.
-      - **Vận hành**: Dễ dàng thêm feature mới (ví dụ: dữ liệu sensor từ các trạm lân cận, dự báo gió từ web thời tiết).
-      - **Tốc độ**: Inference nhanh, phù hợp realtime. ARIMA tốn nhiều tài nguyên tính toán hơn nếu phải re-fit liên tục.
+### 4.3. ARIMA Grid Search (Spark.ipynb)
 
----
+**Mục tiêu**: Thử nghiệm hệ thống các tổ hợp (p, d, q) để tìm tham số tối ưu.
 
-## 5. 📅 Nâng cấp Mùa vụ: SARIMA (Chủ đề 2)
+**Ý nghĩa các tham số**:
+| Tham số | Ý nghĩa | Tác động |
+|---------|---------|----------|
+| **p (AR)** | Số lag trong autoregressive terms | p cao → model phức tạp, capture pattern dài hạn |
+| **d (Diff)** | Số lần differencing | d=0 nếu chuỗi dừng, d=1 nếu có trend |
+| **q (MA)** | Kích thước moving average window | q cao → smoothing nhiều hơn |
 
-### **Chứng minh mùa vụ (Seasonality Proof)**
+**Kết quả Grid Search**:
 
-![Seasonality Proof](images/Topic_acf_seasonality_proof.png)
+![AIC Heatmap](images/Spark_aic_heatmap.png)
+*Hình: Heatmap AIC theo các tổ hợp (p, d, q).*
 
-> 📉 **Diễn giải:**
->
-> - Biểu đồ ACF (kéo dài) cho thấy các đỉnh lặp lại đều đặn tại lag **24, 48, 72...**
-> - Đây là bằng chứng đanh thép cho **mùa vụ ngày (Daily Seasonality, s=24)**. Các hoạt động giao thông và thời tiết lặp lại theo chu kỳ 24h.
-> - Không thấy tín hiệu rõ ràng tại lag 168 (tuần), nên mùa vụ tuần là không đáng kể.
+![MAE Heatmap](images/Spark_mae_heatmap.png)
+*Hình: Heatmap MAE theo các tổ hợp (p, d, q).*
 
-### **Kết quả SARIMA**
+![Top 10 Models](images/Spark_top10_comparison.png)
+*Hình: So sánh Top 10 mô hình ARIMA theo nhiều tiêu chí.*
 
-Chúng tôi so sánh ARIMA(2,0,1) với SARIMA(2,0,1)(1,0,1,24).
+![Parameter Impact](images/Spark_parameter_impact.png)
+*Hình: Tác động của từng tham số đến hiệu suất mô hình.*
 
-| Model      | AIC (Thấp tốt hơn) | MAE   | RMSE   | Nhận xét                                    |
-| ---------- | ------------------ | ----- | ------ | ------------------------------------------- |
-| **ARIMA**  | 42,466             | 93.99 | 132.82 | Baseline                                    |
-| **SARIMA** | **42,268**         | 94.62 | 133.61 | AIC tốt hơn nhưng sai số thực tế không giảm |
+### 4.4. SARIMA (Seasonal ARIMA)
 
-> 📌 **Kết luận:**
-> SARIMA có chỉ số AIC thấp hơn (~200 điểm), chứng tỏ về mặt lý thuyết thống kê, việc thêm thành phần mùa vụ giúp mô hình fit dữ liệu lịch sử tốt hơn. **Tuy nhiên**, khả năng dự báo trên tập test (MAE/RMSE) **không cải thiện**, thậm chí tệ đi chút ít. Điều này cho thấy sự phức tạp hóa mô hình (thêm 4 tham số mùa vụ) là không cần thiết cho mục tiêu dự báo ngắn hạn (1h), nơi mà quán tính của giờ trước quan trọng hơn chu kỳ của ngày hôm qua.
+**Ý tưởng**: Mở rộng ARIMA với thành phần mùa vụ để bắt chu kỳ ngày (24 giờ).
 
-![SARIMA Forecast](images/Topic_arima_vs_sarima_forecast.png)
-_(Dự báo của SARIMA và ARIMA gần như trùng khít lên nhau)_
+**Cấu hình tối ưu**: SARIMA(2, 0, 1)(1, 0, 1, 24)
 
----
+| Model | AIC | BIC | MAE | RMSE |
+|-------|-----|-----|-----|------|
+| ARIMA(2,0,1) | 42,466.80 | 42,492.86 | 93.99 | 132.82 |
+| SARIMA(2,0,1)(1,0,1,24) | 42,268.84 | 42,307.91 | 94.62 | 133.61 |
 
-## 6. 💡 5 Insights & Khuyến nghị cho người Quản lý
-
-Dựa trên kết quả phân tích và dự báo, tôi đề xuất 5 điểm cốt lõi cho việc quản lý chất lượng không khí:
-
-### **Insight #1: "Giờ vàng" và "Giờ đen" của không khí ☀️🌑**
-
-- **Thực tế**: Dữ liệu chỉ ra PM2.5 luôn đạt đỉnh vào ban đêm (20h-01h) và sáng sớm, thấp nhất vào buổi chiều (14h-16h).
-- **Hành động**: Nếu là quản lý đô thị, tôi sẽ **điều chỉnh lịch hoạt động của các xe vệ sinh đường phố/phun nước** tập trung vào khung giờ 12h-13h trưa để cộng hưởng làm sạch không khí tốt nhất cho buổi chiều, và tăng cường kiểm soát xe tải hạng nặng vào khung giờ ban đêm.
-
-### **Insight #2: Cảnh báo sớm dựa trên độ dốc (Rate of Change) ⚠️**
-
-- **Thực tế**: Các đợt ô nhiễm nặng thường bắt đầu bằng việc nồng độ PM2.5 tăng vọt >100 đơn vị/giờ (Spike).
-- **Hành động**: Không chờ đến khi chỉ số chạm "Đỏ" mới cảnh báo. Hệ thống cần kích hoạt cảnh báo "Vàng" ngay khi phát hiện **tốc độ tăng (slope)** của PM2.5 vượt quá 50 µg/m³ trong 1 giờ. Regression làm việc này rất tốt vì nó rất nhạy với lag-1.
-
-### **Insight #3: Mùa vụ là định mệnh, nhưng Spikes là tai nạn 🚑**
-
-- **Thực tế**: ARIMA/SARIMA bắt tốt mùa vụ (ngày nào cũng thế), nhưng thất bại thảm hại trước spike (bất thường).
-- **Hành động**: Không tin tưởng tuyệt đối vào một mô hình duy nhất. Nên dùng mô hình "Hybrid": Dùng ARIMA/SARIMA để dự báo nền (baseline) cho các ngày bình thường, và dùng một mô hình chuyên biệt (như Regression hoặc Anomaly Detection) để "override" kết quả khi phát hiện dấu hiệu bất thường.
-
-### **Insight #4: Vai trò của dữ liệu thời tiết (Gió & Mưa) 🌧️💨**
-
-- **Thực tế**: Thiếu dữ liệu về các tiền chất ô nhiễm (CO, NO2) ảnh hưởng lớn đến dự báo. Đồng thời, gió là yếu tố "quét sạch" bụi nhanh nhất.
-- **Hành động**: Đầu tư thêm cảm biến gió và mưa tại các trạm quan trắc. Khi mô hình nhận thấy sắp có gió mạnh >3m/s, hệ thống có thể tự tin hạ mức cảnh báo ô nhiễm dự kiến xuống, tránh báo động giả gây hoang mang.
-
-### **Insight #5: Quản lý kỳ vọng dự báo 📢**
-
-- **Thực tế**: Ngay cả mô hình tốt nhất (Regression) cũng có sai số MAE ~30 µg/m³. Điều này có nghĩa là nếu dự báo 150 (Unhealthy), thực tế có thể là 120 (USG) hoặc 180 (Unhealthy).
-- **Hành động**: Khi công bố thông tin cho người dân, **đừng đưa ra một con số cứng nhắc**. Hãy đưa ra **dải tin cậy** (ví dụ: "PM2.5 dự kiến khoảng 130-170") hoặc chỉ công bố **mức màu cảnh báo** (Cam/Đỏ) để người dân dễ ra quyết định phòng vệ cá nhân (đeo khẩu trang, đóng cửa sổ).
+> **Nhận xét**: SARIMA có AIC thấp hơn (~198 điểm) nhưng MAE/RMSE tương đương ARIMA.
 
 ---
 
-## 7. 🏁 Kết luận & Hướng dẫn kỹ thuật
+## 5. Kết quả & So sánh
 
-**Tổng kết:**
-Dự án đã chứng minh rằng với bài toán dự báo chất lượng không khí ngắn hạn (1 giờ), các phương pháp Học máy đơn giản (như Gradient Boosting Regression) sử dụng đặc trưng trễ (Lags) hiệu quả hơn vượt trội so với các mô hình chuỗi thời gian cổ điển (ARIMA/SARIMA). Sự phức tạp của SARIMA không mang lại lợi ích thực tế tương xứng so với chi phí tính toán.
+### 5.1. Kết quả Classification
 
-### Hướng dẫn chạy Code
+![Confusion Matrix](images/03_confusion_matrix.png)
+*Hình: Ma trận nhầm lẫn của mô hình Classification.*
+
+| Lớp | Precision | Recall | F1-Score | Support |
+|-----|-----------|--------|----------|---------|
+| Good | 0.00 | 0.00 | 0.00 | 1,032 |
+| Moderate | 0.61 | 0.86 | 0.71 | 4,833 |
+| Unhealthy for Sensitive Groups | 0.40 | 0.16 | 0.23 | 2,166 |
+| Unhealthy | 0.61 | 0.68 | 0.64 | 4,286 |
+| Very Unhealthy | 0.55 | 0.65 | 0.60 | 2,499 |
+| Hazardous | 0.84 | 0.54 | 0.65 | 1,855 |
+| **Accuracy** | | | **0.60** | 16,671 |
+| **Macro Avg** | 0.50 | 0.48 | 0.47 | 16,671 |
+
+### 5.2. Kết quả Regression
+
+![Regression Actual vs Predicted](images/04_actual_vs_predicted.png)
+*Hình: So sánh giá trị thực tế và dự báo từ mô hình Regression.*
+
+![Target Distribution](images/04_target_distribution.png)
+*Hình: Phân phối biến mục tiêu PM2.5.*
+
+**Diễn giải:**
+- Đường dự báo (màu cam) **bám rất sát** đường thực tế (màu xanh), đặc biệt ở các khoảng PM2.5 ổn định.
+- Mô hình **phản ứng nhanh** với các biến động: khi PM2.5 tăng đột ngột, dự báo cũng tăng theo (có độ trễ ~1 giờ).
+- Sai số lớn nhất xảy ra tại các **điểm đảo chiều đột ngột** (từ tăng sang giảm hoặc ngược lại).
+
+| Metric | Giá trị | Ý nghĩa |
+|--------|---------|---------|
+| **RMSE** | 25.33 | Sai số trung bình ~25 µg/m³ |
+| **MAE** | 12.32 | Sai số tuyệt đối trung bình ~12 µg/m³ |
+| **R²** | 0.949 | Mô hình giải thích được 94.9% biến thiên |
+| **SMAPE** | 23.8% | Sai số phần trăm đối xứng |
+
+### 5.3. Kết quả ARIMA
+
+![ARIMA Forecast](images/05_forecast_vs_actual.png)
+*Hình: Dự báo ARIMA so với giá trị thực tế trong giai đoạn test.*
+
+**Diễn giải:**
+- Đường dự báo ARIMA **nhanh chóng hội tụ về giá trị trung bình** (~82 µg/m³) và nằm gần như phẳng.
+- Mô hình **không bắt được các dao động** thực tế, đặc biệt các đợt ô nhiễm cao (>400 µg/m³).
+- Đây là hạn chế cố hữu của ARIMA khi dự báo dài hạn (long-horizon forecast) mà không cập nhật dữ liệu mới.
+
+| Metric | Giá trị |
+|--------|---------|
+| **RMSE** | 104.10 |
+| **MAE** | 77.69 |
+| **Best Order** | ARIMA(1, 0, 3) |
+| **AIC** | 294,792.71 |
+
+### 5.4. ARIMA Grid Search Results
+
+![Forecast Comparison](images/Spark_forecast_comparison.png)
+*Hình: So sánh dự báo giữa các mô hình ARIMA tốt nhất và tệ nhất.*
+
+![AIC vs MAE](images/Spark_aic_vs_mae.png)
+*Hình: Trade-off giữa AIC và MAE cho các cấu hình ARIMA.*
+
+### 5.5. So sánh ARIMA vs SARIMA
+
+![ARIMA vs SARIMA](images/Topic_arima_vs_sarima_forecast.png)
+*Hình: So sánh dự báo ARIMA và SARIMA.*
+
+![Comparison Overlay](images/Topic_comparison_overlay.png)
+*Hình: So sánh tổng quan các mô hình.*
+
+### 5.6. Phân tích Residuals & Spike
+
+![Residual Diagnostics](images/Topic_residual_diagnostics.png)
+*Hình: Phân tích residual của mô hình ARIMA.*
+
+![Error Distribution](images/Topic_error_distribution.png)
+*Hình: Phân phối sai số dự báo.*
+
+![Spike Analysis](images/Topic_spike_analysis.png)
+*Hình: Phân tích khả năng dự báo các đợt ô nhiễm đột biến.*
+
+| Model | Residual Mean | Residual Std | MAE (Spike) | RMSE (Spike) |
+|-------|---------------|--------------|-------------|--------------|
+| ARIMA | 1.17 | 16.91 | - | - |
+| Regression | - | - | 30.15 | 43.23 |
+
+### 5.7. Bảng so sánh tổng hợp
+
+| Tiêu chí | Regression | ARIMA | Nhận xét |
+|----------|------------|-------|----------|
+| **RMSE** | **25.33** ✅ | 104.10 | Regression tốt hơn **4.1 lần** |
+| **MAE** | **12.32** ✅ | 77.69 | Regression tốt hơn **6.3 lần** |
+| **R²** | **0.949** ✅ | N/A | Regression giải thích tốt biến thiên |
+| **Bắt spike** | Tốt (độ trễ 1h) | Kém (mượt hóa) | Regression phù hợp cảnh báo sớm |
+| **Tốc độ** | Nhanh | Chậm | Regression dễ triển khai real-time |
+
+> **Kết luận**: Với bài toán dự báo **1 giờ tiếp theo**, **Regression vượt trội hoàn toàn** so với ARIMA.
+
+---
+
+## 6. Insights & Khuyến nghị
+
+### 🔍 Insight 1: 70% thời gian không khí ở mức không lành mạnh
+**Dữ liệu cho thấy**: Chỉ 3.4% thời gian PM2.5 ở mức "Tốt" (<9 µg/m³). Gần 70% thời gian ở mức Unhealthy trở lên.
+
+**Khuyến nghị cho nhà quản lý**:
+- Cần **hệ thống cảnh báo thường trực**, không chỉ khi có sự cố
+- Đầu tư vào **hạ tầng đo lường** với mật độ trạm cao hơn để cảnh báo cục bộ
+
+---
+
+### 🔍 Insight 2: Chu kỳ ô nhiễm theo giờ trong ngày rất rõ ràng
+**Dữ liệu cho thấy**: PM2.5 cao nhất vào 1-3h sáng và 20-23h tối, thấp nhất 14-16h chiều.
+
+**Khuyến nghị cho người dân**:
+- **Tránh hoạt động ngoài trời** vào khung giờ cao điểm sáng
+- Nếu cần tập thể dục ngoài trời, **chọn khung 14-16h** khi không khí tốt nhất
+- Sử dụng khẩu trang N95 vào giờ cao điểm giao thông
+
+---
+
+### 🔍 Insight 3: Đặc trưng lag-1 hour là yếu tố quan trọng nhất
+**Dữ liệu cho thấy**: Tương quan PM2.5 với chính nó sau 1 giờ rất cao (~0.97). Mô hình regression đạt R²=0.949 nhờ feature PM2.5_lag1.
+
+**Khuyến nghị cho hệ thống cảnh báo sớm**:
+- Triển khai **dự báo rolling mỗi giờ** (cập nhật liên tục)
+- **Độ chính xác MAE ~12 µg/m³** đủ tin cậy để phát cảnh báo
+- Với mức Hazardous (>225 µg/m³), dự báo chỉ cần chính xác ~5% để cảnh báo đúng
+
+---
+
+### 🔍 Insight 4: ARIMA không phù hợp cho dự báo real-time
+**Dữ liệu cho thấy**: ARIMA(1,0,3) cho RMSE = 104 (kém 4x so với Regression) vì xu hướng hội tụ về mean khi forecast dài.
+
+**Khuyến nghị kỹ thuật**:
+- **Không dùng ARIMA chuẩn** cho hệ thống dự báo thời gian thực
+- Nếu muốn dùng ARIMA, cần thiết kế **rolling forecast** (re-fit mỗi bước)
+- Ưu tiên **Regression/Gradient Boosting** hoặc **LSTM** cho production
+
+---
+
+### 🔍 Insight 5: Các đợt ô nhiễm đột biến (spike) là thách thức lớn nhất
+**Dữ liệu cho thấy**: Cả hai mô hình đều khó dự báo chính xác tại các điểm đảo chiều đột ngột (spike lên hoặc spike xuống).
+
+**Khuyến nghị cải thiện**:
+- Tích hợp **dữ liệu dự báo thời tiết** (đặc biệt gió, mưa) để phát hiện sớm spike
+- Thêm **feature tốc độ thay đổi** (rate of change) của PM2.5 các giờ trước
+- Xây dựng **mô hình riêng cho anomaly detection** để cảnh báo spike
+
+---
+
+### 🔍 Insight 6 (Bonus): Phân loại AQI gặp khó khăn với lớp thiểu số
+**Dữ liệu cho thấy**: Mô hình classification đạt Accuracy 60.2%, nhưng F1 của lớp "Good" = 0% (không nhận diện được) do mất cân bằng dữ liệu nghiêm trọng.
+
+**Khuyến nghị**:
+- Với bài toán **cảnh báo nguy hiểm**, ưu tiên tối ưu Recall của lớp "Hazardous" (đã đạt 53.5%)
+- Cân nhắc **gộp các lớp** (Good + Moderate) hoặc dùng **oversampling** cho lớp thiểu số
+
+---
+
+## 7. Hướng dẫn Cài đặt & Chạy
+
+### Yêu cầu
+- Python 3.9+
+- Jupyter Notebook
+
+### Cài đặt
 
 ```bash
-# 1. Cài đặt môi trường
-conda activate HocMay
+# Clone repository
+git clone https://github.com/ThanhTung-KHMT-1701/AirQuality_TimeSeries.git
+cd AirQuality_TimeSeries
+
+# Tạo môi trường ảo
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
+
+# Cài đặt dependencies
 pip install -r requirements.txt
-
-# 2. Chạy toàn bộ pipeline phân tích & so sánh
-python run_papermill.py
-
-# 3. Kết quả sẽ tự động lưu vào folder /images và /data/processed
 ```
+
+### Chạy pipeline
+
+```bash
+# Chạy toàn bộ pipeline (preprocessing → classification → regression → ARIMA)
+python run_papermill.py
+```
+
+### Cấu trúc thư mục
+
+```
+AirQuality_TimeSeries/
+├── data/
+│   ├── raw/                 # Dữ liệu gốc (12 file CSV)
+│   └── processed/           # Dữ liệu đã xử lý + kết quả
+│       ├── 01_*.csv         # Preprocessing & EDA
+│       ├── 02_*.csv         # Feature preparation
+│       ├── 03_*.csv/json    # Classification results
+│       ├── 04_*.csv/json    # Regression results
+│       ├── 05_*.csv/json    # ARIMA results
+│       ├── Spark_*.csv      # ARIMA Grid Search results
+│       └── Topic_*.csv      # SARIMA comparison
+├── images/                  # Biểu đồ xuất ra
+│   ├── 01_*.png             # EDA charts
+│   ├── 03_*.png             # Classification charts
+│   ├── 04_*.png             # Regression charts
+│   ├── 05_*.png             # ARIMA charts
+│   ├── Spark_*.png          # Grid Search charts
+│   └── Topic_*.png          # SARIMA comparison charts
+├── notebooks/
+│   ├── 01_preprocessing_and_eda.ipynb
+│   ├── 02_feature_preparation.ipynb
+│   ├── 03_classification_modelling.ipynb
+│   ├── 04_regression_modelling.ipynb
+│   ├── 05_arima_forecasting.ipynb
+│   ├── Spark.ipynb          # ARIMA Grid Search
+│   └── Topic.ipynb          # ARIMA vs SARIMA comparison
+├── src/                     # Library code
+│   ├── classification_library.py
+│   ├── regression_library.py
+│   └── timeseries_library.py
+├── run_papermill.py         # Script chạy pipeline
+├── requirements.txt
+└── README.md
+```
+
+---
+
+## 8. Kết luận
+
+### Tóm tắt kết quả
+| Bài toán | Mô hình tốt nhất | Metric chính |
+|----------|-----------------|--------------|
+| Dự báo PM2.5 (1h) | **Regression** | RMSE = 25.33, R² = 0.949 |
+| Phân loại AQI | HistGradientBoosting | Accuracy = 60.2%, F1-macro = 0.47 |
+| Time-series ARIMA | ARIMA(1,0,3) | RMSE = 104.10, MAE = 77.69 |
+| Time-series SARIMA | SARIMA(2,0,1)(1,0,1,24) | AIC = 42,268.84 |
+| ARIMA Grid Search | Best by AIC/MAE | Varied by criteria |
+
+### Danh sách các file dữ liệu đầu ra
+
+#### Data Files (CSV/JSON)
+| File | Mô tả |
+|------|-------|
+| 01_class_distribution.csv | Phân bố các lớp AQI |
+| 01_cleaned.csv | Dữ liệu đã làm sạch |
+| 01_missing_rate.csv | Tỷ lệ dữ liệu thiếu |
+| 02_feature_list.csv | Danh sách đặc trưng |
+| 03_classification_report.csv | Báo cáo phân loại chi tiết |
+| 03_metrics.json | Metrics classification |
+| 04_regression_metrics.json | Metrics regression |
+| 04_regression_predictions.csv | Dự báo từ mô hình regression |
+| 05_arima_pm25_summary.json | Tóm tắt kết quả ARIMA |
+| 05_arima_pm25_predictions.csv | Dự báo từ mô hình ARIMA |
+| Spark_grid_search_results.csv | Kết quả Grid Search ARIMA |
+| Spark_best_models_summary.csv | Tóm tắt các mô hình tốt nhất |
+| Topic_metrics_comparison.csv | So sánh metrics các mô hình |
+| Topic_sarima_comparison.csv | So sánh ARIMA vs SARIMA |
+| Topic_residual_statistics.csv | Thống kê residual |
+| Topic_spike_metrics.csv | Metrics cho các đợt spike |
+
+#### Image Files (PNG)
+| File | Mô tả |
+|------|-------|
+| 01_class_distribution.png | Biểu đồ phân bố lớp AQI |
+| 03_confusion_matrix.png | Ma trận nhầm lẫn |
+| 04_actual_vs_predicted.png | Thực tế vs Dự báo (Regression) |
+| 04_target_distribution.png | Phân phối biến mục tiêu |
+| 05_acf_plot.png | Biểu đồ ACF |
+| 05_pacf_plot.png | Biểu đồ PACF |
+| 05_forecast_vs_actual.png | Dự báo ARIMA vs Thực tế |
+| 05_hourly_seasonality.png | Tính mùa vụ theo giờ |
+| 05_raw_timeseries_30days.png | Chuỗi thời gian 30 ngày |
+| 05_rolling_statistics.png | Rolling statistics |
+| Spark_aic_heatmap.png | Heatmap AIC Grid Search |
+| Spark_mae_heatmap.png | Heatmap MAE Grid Search |
+| Spark_top10_comparison.png | So sánh Top 10 ARIMA models |
+| Spark_parameter_impact.png | Tác động của từng tham số |
+| Spark_forecast_comparison.png | So sánh dự báo các models |
+| Spark_aic_vs_mae.png | Trade-off AIC vs MAE |
+| Topic_acf_seasonality_proof.png | Chứng minh tính mùa vụ |
+| Topic_arima_vs_sarima_forecast.png | So sánh ARIMA vs SARIMA |
+| Topic_comparison_overlay.png | So sánh tổng quan |
+| Topic_error_distribution.png | Phân phối sai số |
+| Topic_forecast_comparison.png | So sánh dự báo |
+| Topic_residual_diagnostics.png | Phân tích residual |
+| Topic_spike_analysis.png | Phân tích spike |
+
+### Khuyến nghị triển khai
+1. **Hệ thống cảnh báo**: Sử dụng mô hình Regression với dự báo rolling mỗi giờ
+2. **Ngưỡng cảnh báo**: MAE ~12 µg/m³ đủ tin cậy cho các mức nguy hiểm
+3. **ARIMA Grid Search**: Tham khảo notebook Spark.ipynb để chọn tham số phù hợp mục tiêu
+4. **Cải tiến tương lai**: Tích hợp dữ liệu dự báo thời tiết + mô hình deep learning (LSTM)
+
+---
+
+**Tác giả**: ThanhTung-KHMT-1701  
+**Cập nhật**: Tháng 1/2026
